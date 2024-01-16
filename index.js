@@ -7,6 +7,7 @@ const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const session = require("express-session");
 const connectDB = require("./config/db");
 const userModel = require("./models/user.model");
+const generateToken = require("./utils/jwt");
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
@@ -27,7 +28,6 @@ passport.use(
         "352706182914-aid550g0kflki6g68qaarj08hlgk0of7.apps.googleusercontent.com",
       clientSecret: "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",
       callbackURL: "http://localhost:3000/auth/google/callback",
-      scope: ["profile", "email"],
     },
     async (accessToken, refreshToken, profile, done) => {
       // Your logic to store user information in the database or session
@@ -35,18 +35,24 @@ passport.use(
       if (u) {
         return done(null, {
           message: "User already exists!",
+          status: 400,
         });
       }
 
       // User does not exist, create a new user
       const newUser = await userModel.create({
-        username: profile.username,
-        lastname: profile.name,
-        firstname: profile.displayName,
+        username: profile.name.familyName,
+        lastname: profile.name.familyName,
+        firstname: profile.name.givenName,
         email: profile.emails[0].value,
       });
 
-      return done(null, newUser);
+      // create a token
+      const token = generateToken(newUser._id);
+      return done(null, {
+        newUser,
+        status: 201,
+      });
     }
   )
 );
@@ -66,21 +72,25 @@ app.get(
 );
 
 // Callback route after successful Google login
-app.get('/auth/google/callback',
-    passport.authenticate('google', { failureRedirect: '/' }),
-    (req, res) => {
-        res.redirect('/dashboard'); // Redirect after successful login
-    }
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", { failureRedirect: "/" }),
+  (req, res) => {
+    res.redirect("/dashboard"); // Redirect after successful login
+  }
 );
 
 app.get("/dashboard", (req, res) => {
   if (req.isAuthenticated()) {
-    res.send(`Welcome, ${req.user.displayName}!`);
+    if (req.user.status == 201) {
+      res.send(`Welcome, ${req.user.newUser.username}!`);
+    } else {
+      res.send(req.user.message);
+    }
   } else {
     res.redirect("/");
   }
 });
-
 
 app.get("/", (req, res) => {
   res.send('Home page. <a href="/auth/google">Login with Google</a>');
