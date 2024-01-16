@@ -12,8 +12,16 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 const PORT = process.env.PORT || 3000;
+const cors = require("cors");
 
 connectDB();
+
+app.use(
+  cors({
+    credentials: true,
+    origin: "http://localhost:5173",
+  })
+);
 
 /* Google auth */
 app.use(session({ secret: "secret", resave: true, saveUninitialized: true }));
